@@ -26,6 +26,7 @@ require_once BENTO_EMBEDS_PATH . '/inc/helpers/helper-functions.php';
  * @return void
  */
 function bento_embeds_features_plugin_loader() {
+	\Bento_Embeds\Features\Inc\MetaBox::get_instance();
 	\Bento_Embeds\Features\Inc\Plugin::get_instance();
 }
 
