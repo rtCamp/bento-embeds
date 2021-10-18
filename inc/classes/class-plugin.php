@@ -25,6 +25,9 @@ class Plugin {
 		add_filter( 'render_block', [ $this, 'bento_youtube' ], 10, 2 );
 		add_filter( 'render_block', [ $this, 'bento_soundcloud' ], 10, 2 );
 
+		add_filter( 'wp_enqueue_scripts', [ $this, 'load_scripts' ] );
+		add_filter( 'script_loader_tag', [ $this, 'make_script_async' ], 10, 2 );
+
 	}
 
 	/**
@@ -57,15 +60,13 @@ class Plugin {
 
 		ob_start()
 		?>
-		<script src="https://cdn.ampproject.org/custom-elements-polyfill.js"></script>
-		<script async custom-element="amp-twitter" src="https://cdn.ampproject.org/v0/amp-twitter-1.0.js"></script>
-		<link rel="stylesheet" href="https://cdn.ampproject.org/v0/amp-twitter-1.0.css">
 		<style>
 			bento-twitter {
-			width: 375px;
-			height: 620px;
+				width: 375px;
+				height: 620px;
 			}
 		</style>
+
 		<figure class="wp-block-embed is-type-rich is-provider-twitter wp-block-embed-twitter"><div class="wp-block-embed__wrapper">
 			<div class="twitter-tweet twitter-tweet-rendered" style="display: flex; max-width: 550px; width: 100%; margin-top: 10px; margin-bottom: 10px;">
 				<bento-twitter id="my-tweet" data-tweetid="<?php echo esc_attr( $tweet_id ); ?>">
@@ -103,9 +104,6 @@ class Plugin {
 
 		ob_start()
 		?>
-		<script src="https://cdn.ampproject.org/custom-elements-polyfill.js"></script>
-		<script async custom-element="amp-youtube" src="https://cdn.ampproject.org/v0/amp-youtube-1.0.js"></script>
-		<link rel="stylesheet" href="https://cdn.ampproject.org/v0/amp-youtube-1.0.css">
 
 		<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">
 			<div class="wp-block-embed__wrapper">
@@ -152,7 +150,6 @@ class Plugin {
 
 		ob_start()
 		?>
-		<script src="https://cdn.ampproject.org/custom-elements-polyfill.js"></script>
 		<style data-bento-boilerplate>
 			bento-soundcloud {
 			display: block;
@@ -160,14 +157,11 @@ class Plugin {
 			position: relative;
 			}
 		</style>
-		<script async src="https://cdn.ampproject.org/v0/bento-soundcloud-1.0.js"></script>
 		<style>
 			bento-soundcloud {
-			aspect-ratio: 16/9;
+				aspect-ratio: 16/9;
 			}
 		</style>
-		<link rel="stylesheet" href="https://cdn.ampproject.org/v0/amp-soundcloud-1.0.css">
-
 		<figure class="wp-block-embed is-type-rich is-provider-soundcloud wp-block-embed-soundcloud">
 			<div class="wp-block-embed__wrapper">
 				<bento-soundcloud
@@ -254,6 +248,113 @@ class Plugin {
 		}
 
 		return $video_id;
+	}
+
+	/**
+	 * Load scripts
+	 *
+	 * @return void
+	 */
+	public function load_scripts() {
+
+		$load_bento_components = get_post_meta( get_the_ID(), 'load_bento_components', true );
+
+		$load_bento_components = boolval( $load_bento_components );
+
+		if ( ! $load_bento_components ) {
+			return;
+		}
+
+		$scripts = [
+			'twitter'    => 'amp-twitter-1.0',
+			'youtube'    => 'amp-youtube-1.0',
+			'soundcloud' => 'amp-soundcloud-1.0',
+		];
+
+		foreach ( $scripts as $embed => $script_name ) {
+			if ( $this->has_block( 'core/embed', $embed ) ) {
+				wp_enqueue_script( 'bento-embeds-custom-polyfill', 'https://cdn.ampproject.org/custom-elements-polyfill.js', [], null, true );
+				wp_enqueue_style( sprintf( 'bento-embeds-amp-%1$s-style', $embed ), sprintf( 'https://cdn.ampproject.org/v0/%1$s.css', $script_name ), [], null );
+				wp_enqueue_script( sprintf( 'bento-embeds-amp-%1$s', $embed ), sprintf( 'https://cdn.ampproject.org/v0/%1$s.js', $script_name ), [], null, true );
+			}
+		}
+
+	}
+
+	/**
+	 * Load bento embed scripts async.
+	 *
+	 * @param string $tag    The script tag.
+	 * @param string $handle The script handle.
+	 *
+	 * @return string Script loader tag.
+	 */
+	public function make_script_async( $tag, $handle ) {
+
+		$scripts = [
+			'twitter',
+			'soundcloud',
+			'youtube',
+		];
+
+		foreach ( $scripts as $script_name ) {
+
+			if ( sprintf( 'bento-embeds-amp-%1$s', $script_name ) === $handle ) {
+				return str_replace( '<script', sprintf( '<script async custom-element="amp-%1$s"', $script_name ), $tag );
+			}
+		}
+
+		return $tag;
+	}
+
+	/**
+	 * Checks if the post has a block with given embed provider.
+	 *
+	 * @param string                  $block_name     Block name.
+	 * @param string                  $embed_provider Embed provider.
+	 * @param int|string|WP_Post|null $post Optional. Post content, post ID, or post object. Defaults to global $post.
+	 * @return boolean
+	 */
+	public function has_block( $block_name, $embed_provider, $post = null ) {
+
+		if ( ! has_blocks( $post ) ) {
+			return false;
+		}
+
+		if ( ! is_string( $post ) ) {
+			$wp_post = get_post( $post );
+
+			if ( $wp_post instanceof \WP_Post ) {
+				$post = $wp_post->post_content;
+			}
+		}
+
+		/*
+		 * Normalize block name to include namespace, if provided as non-namespaced.
+		 * This matches behavior for WordPress 5.0.0 - 5.3.0 in matching blocks by
+		 * their serialized names.
+		 */
+		if ( false === strpos( $block_name, '/' ) ) {
+			$block_name = 'core/' . $block_name;
+		}
+
+		// Test for existence of block by its fully qualified name.
+		$has_block = false !== strpos( $post, '<!-- wp:' . $block_name . ' ' );
+
+		if ( ! $has_block ) {
+			/*
+			 * If the given block name would serialize to a different name, test for
+			 * existence by the serialized form.
+			 */
+			$serialized_block_name = strip_core_block_namespace( $block_name );
+
+			if ( $serialized_block_name !== $block_name ) {
+				$has_block = false !== strpos( $post, '<!-- wp:' . $serialized_block_name . ' ' );
+				$has_type  = false !== strpos( $post, sprintf( '"providerNameSlug":"%1$s', $embed_provider ) );
+			}
+		}
+
+		return ( $has_block && $has_type );
 	}
 
 }
