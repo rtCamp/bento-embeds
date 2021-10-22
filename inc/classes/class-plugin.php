@@ -261,23 +261,23 @@ class Plugin {
 
 		$load_bento_components = boolval( $load_bento_components );
 
-		if ( ! $load_bento_components ) {
+		if ( ! $load_bento_components || is_amp_request() ) {
 			return;
 		}
 
 		$scripts = [
-			'twitter'    => 'amp-twitter-1.0',
-			'youtube'    => 'amp-youtube-1.0',
-			'soundcloud' => 'amp-soundcloud-1.0',
+			'twitter'    => 'bento-twitter-1.0',
+			'youtube'    => 'bento-youtube-1.0',
+			'soundcloud' => 'bento-soundcloud-1.0',
 		];
 
 		foreach ( $scripts as $embed => $script_name ) {
 			if ( $this->has_block( 'core/embed', $embed ) ) {
-				wp_enqueue_script( 'bento-embeds-custom-polyfill', 'https://cdn.ampproject.org/custom-elements-polyfill.js', [], null, true );
-				wp_enqueue_style( sprintf( 'bento-embeds-amp-%1$s-style', $embed ), sprintf( 'https://cdn.ampproject.org/v0/%1$s.css', $script_name ), [], null );
-				wp_enqueue_script( sprintf( 'bento-embeds-amp-%1$s', $embed ), sprintf( 'https://cdn.ampproject.org/v0/%1$s.js', $script_name ), [], null, true );
+				wp_enqueue_style( sprintf( 'bento-embeds-amp-%1$s-style', $embed ), sprintf( '/dist/v0/%1$s.css', $script_name ), [], null );
+				wp_enqueue_script( sprintf( 'bento-embeds-amp-%1$s', $embed ), sprintf( '/dist/v0/%1$s.js', $script_name ), [], null, true );
 			}
 		}
+		wp_enqueue_script( 'bento-js', '/dist/bento.js', [], null, true );
 
 	}
 
